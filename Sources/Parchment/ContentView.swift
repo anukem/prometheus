@@ -12,6 +12,8 @@ struct ContentView: View {
 
     @State private var viewMode: ViewMode = .preview
     @State private var showOutline: Bool = true
+    @State private var nextScrollToken: Int = 0
+    @State private var pendingScrollRequest: ReaderScrollRequest?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +24,7 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 mainArea
                 if showOutline {
-                    OutlinePanel(model: model)
+                    OutlinePanel(model: model, onSelect: handleOutlineSelection)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -100,7 +102,11 @@ struct ContentView: View {
     var mainArea: some View {
         switch viewMode {
         case .preview:
-            ReaderView(source: document.text, onScrollProgressChanged: updateScrollProgress)
+            ReaderView(
+                source: document.text,
+                scrollRequest: pendingScrollRequest,
+                onScrollProgressChanged: updateScrollProgress
+            )
         case .source:
             SourceView(text: $document.text)
         case .split:
@@ -108,7 +114,11 @@ struct ContentView: View {
                 SourceView(text: $document.text)
                     .frame(maxWidth: .infinity)
                 Divider().overlay(Theme.border)
-                ReaderView(source: document.text, onScrollProgressChanged: updateScrollProgress)
+                ReaderView(
+                    source: document.text,
+                    scrollRequest: pendingScrollRequest,
+                    onScrollProgressChanged: updateScrollProgress
+                )
                     .frame(maxWidth: .infinity)
             }
         }
@@ -156,6 +166,15 @@ struct ContentView: View {
 
     private func updateScrollProgress(_ value: Double) {
         model.scrollProgress = min(1, max(0, value))
+    }
+
+    private func handleOutlineSelection(index: Int, item: OutlineItem) {
+        model.activeHeadingIndex = index
+
+        let sourceLength = max(1, document.text.count)
+        let progress = min(1, max(0, Double(item.index) / Double(sourceLength)))
+        nextScrollToken += 1
+        pendingScrollRequest = ReaderScrollRequest(token: nextScrollToken, outlineIndex: index, fallbackProgress: progress)
     }
 }
 

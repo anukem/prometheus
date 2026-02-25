@@ -3,26 +3,63 @@ import Markdown
 
 struct MarkdownRenderer: View {
     let source: String
+    let onHeadingPositionsChanged: ([Int: CGFloat]) -> Void
 
     var body: some View {
-        let doc = Document(parsing: source)
+        let blocks = parsedBlocks()
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(doc.children.enumerated()), id: \.offset) { _, block in
-                BlockView(block: block)
+            ForEach(blocks) { block in
+                BlockView(block: block.markup, outlineIndex: block.outlineIndex)
             }
         }
+        .onPreferenceChange(HeadingPositionPreferenceKey.self, perform: onHeadingPositionsChanged)
     }
+
+    private func parsedBlocks() -> [RenderedBlock] {
+        let doc = Document(parsing: source)
+        var headingIndex = 0
+        var result: [RenderedBlock] = []
+
+        for block in doc.children {
+            let outlineIndex: Int?
+            if block is Heading {
+                outlineIndex = headingIndex
+                headingIndex += 1
+            } else {
+                outlineIndex = nil
+            }
+            result.append(RenderedBlock(markup: block, outlineIndex: outlineIndex))
+        }
+        return result
+    }
+}
+
+private struct RenderedBlock: Identifiable {
+    let id = UUID()
+    let markup: any Markup
+    let outlineIndex: Int?
 }
 
 // MARK: - Block
 
 struct BlockView: View {
     let block: any Markup
+    let outlineIndex: Int?
 
     var body: some View {
         Group {
             if let heading = block as? Heading {
                 HeadingView(heading: heading)
+                    .background {
+                        if let outlineIndex {
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: HeadingPositionPreferenceKey.self,
+                                    value: [outlineIndex: geo.frame(in: .named("readerContent")).minY]
+                                )
+                            }
+                        }
+                    }
                     .padding(.bottom, heading.level == 1 ? 10 : 8)
                     .padding(.top, heading.level == 1 ? 0 : 24)
             } else if let para = block as? Paragraph {
@@ -48,6 +85,14 @@ struct BlockView: View {
                 EmptyView()
             }
         }
+    }
+}
+
+private struct HeadingPositionPreferenceKey: PreferenceKey {
+    static var defaultValue: [Int: CGFloat] = [:]
+
+    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
 

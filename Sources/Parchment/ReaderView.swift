@@ -2,18 +2,30 @@ import SwiftUI
 import Markdown
 import AppKit
 
+struct ReaderScrollRequest: Equatable {
+    let token: Int
+    let outlineIndex: Int
+    let fallbackProgress: Double
+}
+
 struct ReaderView: View {
     let source: String
+    let scrollRequest: ReaderScrollRequest?
     let onScrollProgressChanged: (Double) -> Void
 
     var body: some View {
-        ReaderScrollContainer(source: source, onScrollProgressChanged: onScrollProgressChanged)
+        ReaderScrollContainer(
+            source: source,
+            scrollRequest: scrollRequest,
+            onScrollProgressChanged: onScrollProgressChanged
+        )
             .background(Theme.background)
     }
 }
 
 private struct ReaderScrollContainer: NSViewRepresentable {
     let source: String
+    let scrollRequest: ReaderScrollRequest?
     let onScrollProgressChanged: (Double) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -27,7 +39,12 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.contentView.postsBoundsChangedNotifications = true
 
-        let hostingView = NSHostingView(rootView: ReaderContentView(source: source))
+        let hostingView = NSHostingView(
+            rootView: ReaderContentView(
+                source: source,
+                onHeadingPositionsChanged: context.coordinator.updateHeadingPositions
+            )
+        )
         hostingView.translatesAutoresizingMaskIntoConstraints = true
         hostingView.autoresizingMask = [.width]
         hostingView.postsFrameChangedNotifications = true
@@ -42,6 +59,7 @@ private struct ReaderScrollContainer: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.updateSource(source)
+        context.coordinator.handle(scrollRequest: scrollRequest)
     }
 
     final class Coordinator {
@@ -51,6 +69,9 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         weak var hostingView: NSHostingView<ReaderContentView>?
         private var lastSource: String = ""
         private var lastProgress: Double = -1
+        private var lastScrollToken: Int?
+        private var headingMinYByOutlineIndex: [Int: CGFloat] = [:]
+        private var pendingScrollRequest: ReaderScrollRequest?
 
         init(onScrollProgressChanged: @escaping (Double) -> Void) {
             self.onScrollProgressChanged = onScrollProgressChanged
@@ -103,11 +124,80 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         func updateSource(_ source: String) {
             guard source != lastSource else { return }
             lastSource = source
+            headingMinYByOutlineIndex = [:]
+            pendingScrollRequest = nil
+
             guard let hostingView else { return }
-            hostingView.rootView = ReaderContentView(source: source)
+            hostingView.rootView = ReaderContentView(
+                source: source,
+                onHeadingPositionsChanged: updateHeadingPositions
+            )
             DispatchQueue.main.async { [weak self] in
                 self?.syncDocumentFrame()
                 self?.emitProgress(reason: "sourceChanged")
+            }
+        }
+
+        func handle(scrollRequest: ReaderScrollRequest?) {
+            guard let scrollRequest else {
+                return
+            }
+            guard scrollRequest.token != lastScrollToken else {
+                return
+            }
+            lastScrollToken = scrollRequest.token
+            scrollToRequest(scrollRequest, reason: "outlineTap")
+        }
+
+        func updateHeadingPositions(_ positions: [Int: CGFloat]) {
+            headingMinYByOutlineIndex = positions
+            if let pendingScrollRequest {
+                scrollToRequest(pendingScrollRequest, reason: "pendingWithAnchors")
+            }
+        }
+
+        private func scrollToRequest(_ request: ReaderScrollRequest, reason: String) {
+            if let headingY = headingMinYByOutlineIndex[request.outlineIndex] {
+                pendingScrollRequest = nil
+                scroll(toOffsetY: headingY, reason: reason, mode: "anchor")
+                return
+            }
+
+            pendingScrollRequest = request
+            scroll(toProgress: request.fallbackProgress, reason: reason, mode: "fallback")
+        }
+
+        private func scroll(toProgress progress: Double, reason: String, mode: String) {
+            guard let scrollView, let documentView = scrollView.documentView else { return }
+
+            let viewportHeight = scrollView.contentView.bounds.height
+            let contentHeight = documentView.bounds.height
+            let maxOffset = max(0, contentHeight - viewportHeight)
+            let targetProgress = min(1, max(0, progress))
+            let targetOffset = targetProgress * maxOffset
+            animateScroll(scrollView: scrollView, targetOffset: targetOffset)
+        }
+
+        private func scroll(toOffsetY headingMinY: CGFloat, reason: String, mode: String) {
+            guard let scrollView, let documentView = scrollView.documentView else { return }
+
+            let viewportHeight = scrollView.contentView.bounds.height
+            let contentHeight = documentView.bounds.height
+            let maxOffset = max(0, contentHeight - viewportHeight)
+            let topPadding: CGFloat = 10
+            let targetOffset = min(max(0, headingMinY - topPadding), maxOffset)
+            animateScroll(scrollView: scrollView, targetOffset: targetOffset)
+        }
+
+        private func animateScroll(scrollView: NSScrollView, targetOffset: CGFloat) {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.22
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                scrollView.contentView.animator().setBoundsOrigin(NSPoint(x: 0, y: targetOffset))
+            } completionHandler: { [weak self, weak scrollView] in
+                guard let scrollView else { return }
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+                self?.emitProgress(reason: "outlineScroll")
             }
         }
 
@@ -138,6 +228,7 @@ private struct ReaderScrollContainer: NSViewRepresentable {
 
 private struct ReaderContentView: View {
     let source: String
+    let onHeadingPositionsChanged: ([Int: CGFloat]) -> Void
 
     private var metadata: (type: String, date: String) {
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
@@ -173,13 +264,14 @@ private struct ReaderContentView: View {
                 }
                 .padding(.bottom, 28)
 
-                MarkdownRenderer(source: source)
+                MarkdownRenderer(source: source, onHeadingPositionsChanged: onHeadingPositionsChanged)
             }
             .frame(width: 640)
             .padding(.top, 64)
             .padding(.bottom, 80)
             Spacer(minLength: 0)
         }
+        .coordinateSpace(name: "readerContent")
         .background(Theme.background)
     }
 }
