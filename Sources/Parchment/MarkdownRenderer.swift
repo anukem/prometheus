@@ -4,12 +4,22 @@ import Markdown
 struct MarkdownRenderer: View {
     let source: String
     let onHeadingPositionsChanged: ([Int: CGFloat]) -> Void
+    var annotationStore: AnnotationStore?
 
     var body: some View {
         let blocks = parsedBlocks()
         VStack(alignment: .leading, spacing: 0) {
             ForEach(blocks) { block in
-                BlockView(block: block.markup, outlineIndex: block.outlineIndex)
+                if let store = annotationStore {
+                    AnnotatableBlockView(
+                        block: block.markup,
+                        outlineIndex: block.outlineIndex,
+                        blockId: block.blockId,
+                        annotationStore: store
+                    )
+                } else {
+                    BlockView(block: block.markup, outlineIndex: block.outlineIndex)
+                }
             }
         }
         .onPreferenceChange(HeadingPositionPreferenceKey.self, perform: onHeadingPositionsChanged)
@@ -20,7 +30,7 @@ struct MarkdownRenderer: View {
         var headingIndex = 0
         var result: [RenderedBlock] = []
 
-        for block in doc.children {
+        for (index, block) in doc.children.enumerated() {
             let outlineIndex: Int?
             if block is Heading {
                 outlineIndex = headingIndex
@@ -28,7 +38,8 @@ struct MarkdownRenderer: View {
             } else {
                 outlineIndex = nil
             }
-            result.append(RenderedBlock(markup: block, outlineIndex: outlineIndex))
+            let blockId = blockIdentifier(for: block, at: index)
+            result.append(RenderedBlock(markup: block, outlineIndex: outlineIndex, blockId: blockId))
         }
         return result
     }
@@ -38,6 +49,7 @@ private struct RenderedBlock: Identifiable {
     let id = UUID()
     let markup: any Markup
     let outlineIndex: Int?
+    let blockId: BlockIdentifier
 }
 
 // MARK: - Block

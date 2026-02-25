@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum ViewMode: String, CaseIterable {
     case preview = "Preview"
@@ -9,6 +10,7 @@ enum ViewMode: String, CaseIterable {
 struct ContentView: View {
     @Binding var document: ParchmentDocument
     @StateObject private var model = DocumentModel()
+    @StateObject private var annotationStore = AnnotationStore()
 
     @State private var viewMode: ViewMode = .preview
     @State private var showOutline: Bool = true
@@ -39,6 +41,7 @@ struct ContentView: View {
         }
         .onAppear {
             model.update(source: document.text)
+            loadAnnotations()
         }
     }
 
@@ -76,6 +79,38 @@ struct ContentView: View {
                     .frame(height: 16)
                     .padding(.horizontal, 4)
 
+                // Annotation mode toggle
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { annotationStore.isActive.toggle() }
+                } label: {
+                    Label("Annotate", systemImage: "pencil.and.outline")
+                        .labelStyle(.titleAndIcon)
+                        .font(annotationStore.isActive ? Theme.uiFontMedium : Theme.uiFont)
+                        .foregroundColor(annotationStore.isActive ? Theme.annotationComment : Theme.textFaint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(annotationStore.isActive ? Theme.annotationComment.opacity(0.12) : Color.clear)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+
+                // Copy annotations button
+                if annotationStore.isActive && !annotationStore.annotations.isEmpty {
+                    Button {
+                        annotationStore.exportToClipboard(source: document.text)
+                    } label: {
+                        Label("Copy Annotations", systemImage: "doc.on.clipboard")
+                            .labelStyle(.titleAndIcon)
+                            .font(Theme.uiFont)
+                            .foregroundColor(Theme.textFaint)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider()
+                    .frame(height: 16)
+                    .padding(.horizontal, 4)
+
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { showOutline.toggle() }
                 } label: {
@@ -105,7 +140,8 @@ struct ContentView: View {
             ReaderView(
                 source: document.text,
                 scrollRequest: pendingScrollRequest,
-                onScrollProgressChanged: updateScrollProgress
+                onScrollProgressChanged: updateScrollProgress,
+                annotationStore: annotationStore
             )
         case .source:
             SourceView(text: $document.text)
@@ -117,7 +153,8 @@ struct ContentView: View {
                 ReaderView(
                     source: document.text,
                     scrollRequest: pendingScrollRequest,
-                    onScrollProgressChanged: updateScrollProgress
+                    onScrollProgressChanged: updateScrollProgress,
+                    annotationStore: annotationStore
                 )
                     .frame(maxWidth: .infinity)
             }
@@ -152,6 +189,13 @@ struct ContentView: View {
     }
 
     // MARK: - Helpers
+
+    private func loadAnnotations() {
+        // Get the file URL from the frontmost NSDocument
+        if let nsDoc = NSDocumentController.shared.currentDocument {
+            annotationStore.load(for: nsDoc.fileURL)
+        }
+    }
 
     private func exportDocument() {
         let panel = NSSavePanel()

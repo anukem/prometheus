@@ -12,12 +12,16 @@ struct ReaderView: View {
     let source: String
     let scrollRequest: ReaderScrollRequest?
     let onScrollProgressChanged: (Double) -> Void
+    var annotationStore: AnnotationStore?
 
     var body: some View {
         ReaderScrollContainer(
             source: source,
             scrollRequest: scrollRequest,
-            onScrollProgressChanged: onScrollProgressChanged
+            onScrollProgressChanged: onScrollProgressChanged,
+            annotationStore: annotationStore,
+            annotationVersion: annotationStore?.version ?? 0,
+            annotationActive: annotationStore?.isActive ?? false
         )
             .background(Theme.background)
     }
@@ -27,6 +31,9 @@ private struct ReaderScrollContainer: NSViewRepresentable {
     let source: String
     let scrollRequest: ReaderScrollRequest?
     let onScrollProgressChanged: (Double) -> Void
+    var annotationStore: AnnotationStore?
+    var annotationVersion: Int = 0
+    var annotationActive: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onScrollProgressChanged: onScrollProgressChanged)
@@ -42,13 +49,15 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         let hostingView = NSHostingView(
             rootView: ReaderContentView(
                 source: source,
-                onHeadingPositionsChanged: context.coordinator.updateHeadingPositions
+                onHeadingPositionsChanged: context.coordinator.updateHeadingPositions,
+                annotationStore: annotationStore
             )
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = true
         hostingView.autoresizingMask = [.width]
         hostingView.postsFrameChangedNotifications = true
         scrollView.documentView = hostingView
+        context.coordinator.annotationStore = annotationStore
         context.coordinator.attach(scrollView: scrollView, hostingView: hostingView)
         context.coordinator.updateSource(source)
         context.coordinator.syncDocumentFrame()
@@ -58,7 +67,9 @@ private struct ReaderScrollContainer: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.annotationStore = annotationStore
         context.coordinator.updateSource(source)
+        context.coordinator.refreshAnnotations(version: annotationVersion, active: annotationActive)
         context.coordinator.handle(scrollRequest: scrollRequest)
     }
 
@@ -72,6 +83,9 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         private var lastScrollToken: Int?
         private var headingMinYByOutlineIndex: [Int: CGFloat] = [:]
         private var pendingScrollRequest: ReaderScrollRequest?
+        var annotationStore: AnnotationStore?
+        private var lastAnnotationVersion: Int = -1
+        private var lastAnnotationActive: Bool = false
 
         init(onScrollProgressChanged: @escaping (Double) -> Void) {
             self.onScrollProgressChanged = onScrollProgressChanged
@@ -130,12 +144,25 @@ private struct ReaderScrollContainer: NSViewRepresentable {
             guard let hostingView else { return }
             hostingView.rootView = ReaderContentView(
                 source: source,
-                onHeadingPositionsChanged: updateHeadingPositions
+                onHeadingPositionsChanged: updateHeadingPositions,
+                annotationStore: annotationStore
             )
             DispatchQueue.main.async { [weak self] in
                 self?.syncDocumentFrame()
                 self?.emitProgress(reason: "sourceChanged")
             }
+        }
+
+        func refreshAnnotations(version: Int, active: Bool) {
+            guard version != lastAnnotationVersion || active != lastAnnotationActive else { return }
+            lastAnnotationVersion = version
+            lastAnnotationActive = active
+            guard let hostingView else { return }
+            hostingView.rootView = ReaderContentView(
+                source: lastSource,
+                onHeadingPositionsChanged: updateHeadingPositions,
+                annotationStore: annotationStore
+            )
         }
 
         func handle(scrollRequest: ReaderScrollRequest?) {
@@ -229,6 +256,7 @@ private struct ReaderScrollContainer: NSViewRepresentable {
 private struct ReaderContentView: View {
     let source: String
     let onHeadingPositionsChanged: ([Int: CGFloat]) -> Void
+    var annotationStore: AnnotationStore?
 
     private var metadata: (type: String, date: String) {
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
@@ -264,7 +292,7 @@ private struct ReaderContentView: View {
                 }
                 .padding(.bottom, 28)
 
-                MarkdownRenderer(source: source, onHeadingPositionsChanged: onHeadingPositionsChanged)
+                MarkdownRenderer(source: source, onHeadingPositionsChanged: onHeadingPositionsChanged, annotationStore: annotationStore)
             }
             .frame(width: 640)
             .padding(.top, 64)
