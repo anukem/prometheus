@@ -41,8 +41,7 @@ struct OutlinePanel: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Theme.border).frame(height: 3)
-                        let fraction = model.outline.isEmpty ? 0.0 :
-                            Double(model.activeHeadingIndex + 1) / Double(model.outline.count)
+                        let fraction = model.scrollProgress
                         Capsule()
                             .fill(Theme.accent)
                             .frame(width: geo.size.width * fraction, height: 3)
@@ -51,8 +50,7 @@ struct OutlinePanel: View {
                 .frame(height: 3)
 
                 HStack {
-                    let pct = model.outline.isEmpty ? 0 :
-                        Int((Double(model.activeHeadingIndex + 1) / Double(model.outline.count)) * 100)
+                    let pct = Int(model.scrollProgress * 100)
                     Text("\(pct)% read")
                     Spacer()
                     let remaining = max(0, model.readingTime - (model.readingTime * pct / 100))
