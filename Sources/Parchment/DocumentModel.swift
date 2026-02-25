@@ -1,5 +1,4 @@
 import SwiftUI
-import Markdown
 
 struct OutlineItem: Identifiable {
     let id = UUID()
@@ -30,16 +29,20 @@ class DocumentModel: ObservableObject {
     }
 
     private static func parse(_ source: String) -> ([OutlineItem], Int) {
-        let doc = Document(parsing: source)
         var items: [OutlineItem] = []
-        var charIndex = 0
+        var charOffset = 0
 
-        for child in doc.children {
-            if let heading = child as? Heading {
-                let title = heading.plainText
-                items.append(OutlineItem(level: heading.level, title: title, index: charIndex))
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+        for (lineIndex, rawLine) in lines.enumerated() {
+            let line = String(rawLine)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if let (level, title) = parseHeading(trimmed), !title.isEmpty {
+                items.append(OutlineItem(level: level, title: title, index: charOffset))
             }
-            charIndex += child.debugDescription().count
+
+            let hasNextLine = lineIndex < lines.count - 1
+            charOffset += line.count + (hasNextLine ? 1 : 0)
         }
 
         let words = source
@@ -48,6 +51,27 @@ class DocumentModel: ObservableObject {
             .count
 
         return (items, words)
+    }
+
+    private static func parseHeading(_ line: String) -> (Int, String)? {
+        guard !line.isEmpty else { return nil }
+
+        var level = 0
+        for char in line {
+            if char == "#" {
+                level += 1
+            } else {
+                break
+            }
+        }
+
+        guard (1...6).contains(level) else { return nil }
+
+        let start = line.index(line.startIndex, offsetBy: level)
+        guard start < line.endIndex, line[start] == " " else { return nil }
+
+        let title = line[line.index(after: start)...].trimmingCharacters(in: .whitespaces)
+        return title.isEmpty ? nil : (level, title)
     }
 
     var readingTime: Int {

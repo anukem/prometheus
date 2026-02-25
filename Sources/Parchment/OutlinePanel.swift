@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OutlinePanel: View {
     @ObservedObject var model: DocumentModel
+    let onSelect: (_ index: Int, _ item: OutlineItem) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -20,7 +21,9 @@ struct OutlinePanel: View {
                         OutlineItemRow(
                             item: item,
                             isActive: index == model.activeHeadingIndex,
-                            onTap: { model.activeHeadingIndex = index }
+                            onTap: {
+                                onSelect(index, item)
+                            }
                         )
                     }
                 }
