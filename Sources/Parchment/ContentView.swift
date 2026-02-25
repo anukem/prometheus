@@ -100,7 +100,7 @@ struct ContentView: View {
     var mainArea: some View {
         switch viewMode {
         case .preview:
-            ReaderView(source: document.text)
+            ReaderView(source: document.text, onScrollProgressChanged: updateScrollProgress)
         case .source:
             SourceView(text: $document.text)
         case .split:
@@ -108,7 +108,7 @@ struct ContentView: View {
                 SourceView(text: $document.text)
                     .frame(maxWidth: .infinity)
                 Divider().overlay(Theme.border)
-                ReaderView(source: document.text)
+                ReaderView(source: document.text, onScrollProgressChanged: updateScrollProgress)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -152,6 +152,10 @@ struct ContentView: View {
             // Basic text export for now
             try? document.text.write(to: url, atomically: true, encoding: .utf8)
         }
+    }
+
+    private func updateScrollProgress(_ value: Double) {
+        model.scrollProgress = min(1, max(0, value))
     }
 }
 

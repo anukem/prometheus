@@ -11,8 +11,7 @@ struct ParchmentApp: App {
             ContentView(document: file.$document)
                 .frame(minWidth: 800, minHeight: 600)
         }
-        .windowStyle(.titleBar)
-        .windowToolbarStyle(.unifiedCompact)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Open…") {

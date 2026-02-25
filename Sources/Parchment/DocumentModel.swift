@@ -14,6 +14,7 @@ class DocumentModel: ObservableObject {
     @Published var outline: [OutlineItem] = []
     @Published var wordCount: Int = 0
     @Published var activeHeadingIndex: Int = 0
+    @Published var scrollProgress: Double = 0
 
     private var parseTask: Task<Void, Never>?
 
