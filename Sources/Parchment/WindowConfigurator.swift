@@ -9,7 +9,6 @@ struct WindowConfigurator: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            Self.logWindowState(window, event: "makeNSView.attach")
             context.coordinator.attach(to: window)
         }
         return view
@@ -18,9 +17,7 @@ struct WindowConfigurator: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
             guard let window = nsView.window else { return }
-            Self.logWindowState(window, event: "updateNSView.beforeApply")
             Self.apply(to: window)
-            Self.logWindowState(window, event: "updateNSView.afterApply")
         }
     }
 
@@ -35,36 +32,18 @@ struct WindowConfigurator: NSViewRepresentable {
         window.isMovableByWindowBackground = true
     }
 
-    static func logWindowState(_ window: NSWindow, event: String) {
-        let target = NSColor(Theme.chrome)
-        let current = window.backgroundColor ?? .clear
-        let targetDesc = colorDescription(target)
-        let currentDesc = colorDescription(current)
-        let stamp = ISO8601DateFormatter().string(from: Date())
-        print("[WindowChrome] \(stamp) event=\(event) key=\(window.isKeyWindow) main=\(window.isMainWindow) target=\(targetDesc) current=\(currentDesc)")
-    }
-
-    private static func colorDescription(_ color: NSColor) -> String {
-        guard let sRGB = color.usingColorSpace(.sRGB) else { return "unconvertible" }
-        return String(format: "r=%.4f g=%.4f b=%.4f a=%.4f", sRGB.redComponent, sRGB.greenComponent, sRGB.blueComponent, sRGB.alphaComponent)
-    }
-
     class Coordinator {
         private var tokens: [NSObjectProtocol] = []
 
         func attach(to window: NSWindow) {
-            WindowConfigurator.logWindowState(window, event: "coordinator.attach.beforeApply")
             WindowConfigurator.apply(to: window)
-            WindowConfigurator.logWindowState(window, event: "coordinator.attach.afterApply")
 
             let didBecomeKey = NotificationCenter.default.addObserver(
                 forName: NSWindow.didBecomeKeyNotification,
                 object: window,
                 queue: .main
             ) { _ in
-                WindowConfigurator.logWindowState(window, event: "didBecomeKey.beforeApply")
                 WindowConfigurator.apply(to: window)
-                WindowConfigurator.logWindowState(window, event: "didBecomeKey.afterApply")
             }
             tokens.append(didBecomeKey)
 
@@ -72,9 +51,7 @@ struct WindowConfigurator: NSViewRepresentable {
                 forName: NSWindow.didResignKeyNotification,
                 object: window,
                 queue: .main
-            ) { _ in
-                WindowConfigurator.logWindowState(window, event: "didResignKey")
-            }
+            ) { _ in }
             tokens.append(didResignKey)
         }
 
