@@ -22,6 +22,11 @@ enum Theme {
     static let codeBg       = Color(hex: "ece6db")
     static let codeText     = Color(hex: "5a7a6a")
 
+    // Annotations
+    static let annotationRed      = Color(hex: "c25a4a")
+    static let annotationRedLight = Color(hex: "c25a4a").opacity(0.10)
+    static let annotationComment  = Color(hex: "5a8a9e")
+
     // Typography — IBM Plex Serif for reading content, SF Pro for UI chrome
     static let titleFont    = Font.custom("IBMPlexSerif-SemiBold",      size: 46)
     static let h2Font       = Font.custom("IBMPlexSerif-SemiBold",      size: 26)
