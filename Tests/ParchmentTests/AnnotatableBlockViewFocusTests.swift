@@ -19,4 +19,24 @@ final class AnnotatableBlockViewFocusTests: XCTestCase {
 
         XCTAssertFalse(state.shouldFocusInput)
     }
+
+    func testEscapeKeyClosesCommentComposerSession() {
+        var state = AnnotatableBlockView.CommentComposerState()
+        state.openComposer()
+
+        let shouldClose = state.handleKeyPress(.escape)
+
+        XCTAssertTrue(shouldClose)
+        XCTAssertFalse(state.shouldFocusInput)
+    }
+
+    func testNonEscapeKeyDoesNotCloseCommentComposerSession() {
+        var state = AnnotatableBlockView.CommentComposerState()
+        state.openComposer()
+
+        let shouldClose = state.handleKeyPress(.enter)
+
+        XCTAssertFalse(shouldClose)
+        XCTAssertTrue(state.shouldFocusInput)
+    }
 }
