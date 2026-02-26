@@ -2,6 +2,23 @@ import SwiftUI
 import Markdown
 import AppKit
 
+func targetOffsetForKeyboardBlockNavigation(
+    blockMinY: CGFloat,
+    currentOffset: CGFloat,
+    viewportHeight: CGFloat,
+    contentHeight: CGFloat
+) -> CGFloat {
+    let maxOffset = max(0, contentHeight - viewportHeight)
+    let clampedCurrentOffset = min(max(0, currentOffset), maxOffset)
+    let visibleTop = clampedCurrentOffset
+    let visibleBottom = clampedCurrentOffset + viewportHeight
+    if blockMinY >= visibleTop && blockMinY <= visibleBottom {
+        return clampedCurrentOffset
+    }
+    let topPadding: CGFloat = 10
+    return min(max(0, blockMinY - topPadding), maxOffset)
+}
+
 struct ReaderScrollRequest: Equatable {
     let token: Int
     let outlineIndex: Int
@@ -323,8 +340,15 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         }
 
         private func scrollToBlock(_ index: Int) {
+            guard let scrollView, let documentView = scrollView.documentView else { return }
             guard let minY = blockMinYByIndex[index] else { return }
-            scroll(toOffsetY: minY, reason: "keyboardNav", mode: "block")
+            let targetOffset = targetOffsetForKeyboardBlockNavigation(
+                blockMinY: minY,
+                currentOffset: scrollView.contentView.bounds.origin.y,
+                viewportHeight: scrollView.contentView.bounds.height,
+                contentHeight: documentView.bounds.height
+            )
+            animateScroll(scrollView: scrollView, targetOffset: targetOffset)
         }
 
         private func firstVisibleBlockIndex() -> Int? {
