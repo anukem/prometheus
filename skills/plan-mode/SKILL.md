@@ -15,6 +15,7 @@
 - Files to Edit: exact file paths expected to change; include `None` if no file edits are planned.
 - Plan: numbered steps with expected outcome per step.
 - Plan File: after presenting the plan, write it to `{NAME_OF_FEATURE}.md` in the current workspace.
+- Parchment: after creating the plan file, run `parchment {NAME_OF_FEATURE}.md` to open it.
 - Architecture Diagram: ASCII art showing the impacted components and their relationships.
 - Risks: top failure modes and mitigation.
 - Decision points: items that require user choice.
