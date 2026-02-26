@@ -3,6 +3,11 @@ import Markdown
 
 struct AnnotatableBlockView: View {
     struct CommentComposerState {
+        enum KeyPress {
+            case escape
+            case enter
+        }
+
         var shouldFocusInput = false
 
         mutating func openComposer() {
@@ -11,6 +16,12 @@ struct AnnotatableBlockView: View {
 
         mutating func finishComposerSession() {
             shouldFocusInput = false
+        }
+
+        mutating func handleKeyPress(_ keyPress: KeyPress) -> Bool {
+            guard keyPress == .escape else { return false }
+            finishComposerSession()
+            return true
         }
     }
 
@@ -241,9 +252,7 @@ struct AnnotatableBlockView: View {
                     Spacer()
 
                     Button {
-                        commentText = ""
-                        commentComposerState.finishComposerSession()
-                        withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
+                        cancelCommentComposition()
                     } label: {
                         Text("Cancel")
                             .font(.system(size: 11, weight: .medium))
@@ -280,8 +289,18 @@ struct AnnotatableBlockView: View {
                     .padding(.top, -1) // overlap with accent bar
             )
         }
+        .onExitCommand {
+            guard commentComposerState.handleKeyPress(.escape) else { return }
+            cancelCommentComposition()
+        }
         .cornerRadius(6)
         .shadow(color: Color.black.opacity(0.06), radius: 4, y: 2)
+    }
+
+    private func cancelCommentComposition() {
+        commentText = ""
+        commentComposerState.finishComposerSession()
+        withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
     }
 
     private func submitComment() {
