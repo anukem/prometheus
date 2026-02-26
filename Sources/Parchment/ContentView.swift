@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Markdown
 
 enum ViewMode: String, CaseIterable {
     case preview = "Preview"
@@ -16,6 +17,9 @@ struct ContentView: View {
     @State private var showOutline: Bool = true
     @State private var nextScrollToken: Int = 0
     @State private var pendingScrollRequest: ReaderScrollRequest?
+    @State private var selectedBlockIndex: Int?
+    @State private var nextBlockActionToken: Int = 0
+    @State private var blockActionRequest: BlockKeyboardActionRequest?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -142,7 +146,11 @@ struct ContentView: View {
                 source: document.text,
                 scrollRequest: pendingScrollRequest,
                 onScrollProgressChanged: updateScrollProgress,
-                annotationStore: annotationStore
+                annotationStore: annotationStore,
+                selectedBlockIndex: selectedBlockIndex,
+                shouldAutoFocus: true,
+                blockActionRequest: blockActionRequest,
+                onNavigationAction: handleNavigationAction
             )
         case .source:
             SourceView(text: $document.text)
@@ -155,7 +163,11 @@ struct ContentView: View {
                     source: document.text,
                     scrollRequest: pendingScrollRequest,
                     onScrollProgressChanged: updateScrollProgress,
-                    annotationStore: annotationStore
+                    annotationStore: annotationStore,
+                    selectedBlockIndex: selectedBlockIndex,
+                    shouldAutoFocus: false,
+                    blockActionRequest: blockActionRequest,
+                    onNavigationAction: handleNavigationAction
                 )
                     .frame(maxWidth: .infinity)
             }
@@ -220,6 +232,33 @@ struct ContentView: View {
         let progress = min(1, max(0, Double(item.index) / Double(sourceLength)))
         nextScrollToken += 1
         pendingScrollRequest = ReaderScrollRequest(token: nextScrollToken, outlineIndex: index, fallbackProgress: progress)
+    }
+
+    private func handleNavigationAction(_ action: VimNavigationAction) {
+        switch action {
+        case .none:
+            return
+        case .moveSelection(let index):
+            selectedBlockIndex = index
+        case .selectBlock(let index):
+            selectedBlockIndex = index
+        case .commentBlock(let index):
+            selectedBlockIndex = index
+            annotationStore.isActive = true
+            nextBlockActionToken += 1
+            blockActionRequest = BlockKeyboardActionRequest(token: nextBlockActionToken, blockIndex: index, action: .comment)
+        case .deleteBlock(let index):
+            selectedBlockIndex = index
+            annotationStore.isActive = true
+            guard let blockId = blockIdentifierAt(index: index) else { return }
+            annotationStore.toggleDeletion(blockId: blockId)
+        }
+    }
+
+    private func blockIdentifierAt(index: Int) -> BlockIdentifier? {
+        let blocks = Array(Document(parsing: document.text).children)
+        guard index >= 0, index < blocks.count else { return nil }
+        return blockIdentifier(for: blocks[index], at: index)
     }
 }
 

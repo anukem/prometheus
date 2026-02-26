@@ -1,17 +1,36 @@
 import SwiftUI
 import Markdown
 
+func commentKeyboardActionShouldFocusInput() -> Bool {
+    true
+}
+
+func shouldHandleBlockActionRequest(
+    request: BlockKeyboardActionRequest?,
+    blockIndex: Int,
+    lastHandledToken: Int?
+) -> Bool {
+    guard let request else { return false }
+    guard request.blockIndex == blockIndex else { return false }
+    guard request.token != lastHandledToken else { return false }
+    return true
+}
+
 struct AnnotatableBlockView: View {
     let block: any Markup
     let outlineIndex: Int?
     let blockId: BlockIdentifier
     @ObservedObject var annotationStore: AnnotationStore
+    var isSelected: Bool = false
+    var blockActionRequest: BlockKeyboardActionRequest?
 
     @State private var isComposing = false
     @State private var showActionBar = false
     @State private var commentText = ""
     @State private var isHovered = false
     @State private var submitGate = CommentSubmissionGate()
+    @State private var lastHandledActionToken: Int?
+    @FocusState private var isCommentInputFocused: Bool
 
     private var isDeletionMarked: Bool {
         annotationStore.hasAnnotation(type: .deletion, for: blockId)
@@ -31,7 +50,7 @@ struct AnnotatableBlockView: View {
         } else {
             // Plain rendering — no annotation UI, but @ObservedObject still
             // triggers re-render when isActive flips back to true
-            BlockView(block: block, outlineIndex: outlineIndex)
+            BlockView(block: block, outlineIndex: outlineIndex, blockIndex: blockId.blockIndex, isSelected: isSelected)
         }
     }
 
@@ -43,7 +62,7 @@ struct AnnotatableBlockView: View {
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    BlockView(block: block, outlineIndex: outlineIndex)
+                    BlockView(block: block, outlineIndex: outlineIndex, blockIndex: blockId.blockIndex, isSelected: isSelected)
                         .overlay {
                             if isDeletionMarked {
                                 GeometryReader { geo in
@@ -80,6 +99,12 @@ struct AnnotatableBlockView: View {
                         showActionBar.toggle()
                     }
                 }
+            }
+            .onChange(of: blockActionRequest?.token) { _ in
+                processKeyboardActionRequest()
+            }
+            .onAppear {
+                processKeyboardActionRequest()
             }
 
             // Action bar
@@ -212,6 +237,7 @@ struct AnnotatableBlockView: View {
                     .foregroundColor(Theme.textBody)
                     .textFieldStyle(.plain)
                     .submitLabel(.send)
+                    .focused($isCommentInputFocused)
                     .accessibilityIdentifier("annotation.comment.input")
 
                 HStack(spacing: 12) {
@@ -266,6 +292,35 @@ struct AnnotatableBlockView: View {
             commentText = ""
             withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
         }
+    }
+
+    private func handleKeyboardAction(_ action: BlockKeyboardAction) {
+        switch action {
+        case .comment:
+            commentText = ""
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isComposing = true
+                showActionBar = false
+            }
+            if commentKeyboardActionShouldFocusInput() {
+                DispatchQueue.main.async {
+                    isCommentInputFocused = true
+                }
+            }
+        case .delete:
+            annotationStore.toggleDeletion(blockId: blockId)
+        }
+    }
+
+    private func processKeyboardActionRequest() {
+        guard shouldHandleBlockActionRequest(
+            request: blockActionRequest,
+            blockIndex: blockId.blockIndex,
+            lastHandledToken: lastHandledActionToken
+        ) else { return }
+        guard let request = blockActionRequest else { return }
+        lastHandledActionToken = request.token
+        handleKeyboardAction(request.action)
     }
 
     // MARK: - Comment Bubble
