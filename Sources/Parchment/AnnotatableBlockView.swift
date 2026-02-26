@@ -11,6 +11,7 @@ struct AnnotatableBlockView: View {
     @State private var showActionBar = false
     @State private var commentText = ""
     @State private var isHovered = false
+    @State private var submitGate = CommentSubmissionGate()
 
     private var isDeletionMarked: Bool {
         annotationStore.hasAnnotation(type: .deletion, for: blockId)
@@ -162,6 +163,7 @@ struct AnnotatableBlockView: View {
                 .cornerRadius(5)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("annotation.comment.open")
 
             Button {
                 annotationStore.toggleDeletion(blockId: blockId)
@@ -205,11 +207,12 @@ struct AnnotatableBlockView: View {
                 .cornerRadius(1)
 
             VStack(alignment: .leading, spacing: 10) {
-                TextField("Leave feedback...", text: $commentText, axis: .vertical)
+                TextField("Leave feedback...", text: $commentText, onCommit: submitComment)
                     .font(.custom("IBMPlexSerif-Light", size: 14))
                     .foregroundColor(Theme.textBody)
-                    .lineLimit(1...6)
                     .textFieldStyle(.plain)
+                    .submitLabel(.send)
+                    .accessibilityIdentifier("annotation.comment.input")
 
                 HStack(spacing: 12) {
                     Spacer()
@@ -223,14 +226,10 @@ struct AnnotatableBlockView: View {
                             .foregroundColor(Theme.textFaint)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("annotation.comment.cancel")
 
                     Button {
-                        let trimmed = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            annotationStore.addComment(blockId: blockId, text: trimmed)
-                        }
-                        commentText = ""
-                        withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
+                        submitComment()
                     } label: {
                         Text("Save")
                             .font(.system(size: 11, weight: .semibold))
@@ -246,6 +245,7 @@ struct AnnotatableBlockView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("annotation.comment.save")
                 }
             }
             .padding(12)
@@ -258,6 +258,14 @@ struct AnnotatableBlockView: View {
         }
         .cornerRadius(6)
         .shadow(color: Color.black.opacity(0.06), radius: 4, y: 2)
+    }
+
+    private func submitComment() {
+        submitGate.run {
+            guard annotationStore.addCommentIfNotBlank(blockId: blockId, text: commentText) else { return }
+            commentText = ""
+            withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
+        }
     }
 
     // MARK: - Comment Bubble
@@ -288,5 +296,6 @@ struct AnnotatableBlockView: View {
         }
         .padding(.leading, 8)
         .padding(.vertical, 6)
+        .accessibilityIdentifier("annotation.comment.row.\(annotation.id.uuidString)")
     }
 }
