@@ -4,7 +4,10 @@ import Markdown
 struct MarkdownRenderer: View {
     let source: String
     let onHeadingPositionsChanged: ([Int: CGFloat]) -> Void
+    let onBlockPositionsChanged: ([Int: CGFloat]) -> Void
     var annotationStore: AnnotationStore?
+    var selectedBlockIndex: Int?
+    var blockActionRequest: BlockKeyboardActionRequest?
 
     var body: some View {
         let blocks = parsedBlocks()
@@ -15,14 +18,22 @@ struct MarkdownRenderer: View {
                         block: block.markup,
                         outlineIndex: block.outlineIndex,
                         blockId: block.blockId,
-                        annotationStore: store
+                        annotationStore: store,
+                        isSelected: selectedBlockIndex == block.blockId.blockIndex,
+                        blockActionRequest: blockActionRequest
                     )
                 } else {
-                    BlockView(block: block.markup, outlineIndex: block.outlineIndex)
+                    BlockView(
+                        block: block.markup,
+                        outlineIndex: block.outlineIndex,
+                        blockIndex: block.blockId.blockIndex,
+                        isSelected: selectedBlockIndex == block.blockId.blockIndex
+                    )
                 }
             }
         }
         .onPreferenceChange(HeadingPositionPreferenceKey.self, perform: onHeadingPositionsChanged)
+        .onPreferenceChange(BlockPositionPreferenceKey.self, perform: onBlockPositionsChanged)
     }
 
     private func parsedBlocks() -> [RenderedBlock] {
@@ -46,7 +57,7 @@ struct MarkdownRenderer: View {
 }
 
 private struct RenderedBlock: Identifiable {
-    let id = UUID()
+    var id: Int { blockId.blockIndex }
     let markup: any Markup
     let outlineIndex: Int?
     let blockId: BlockIdentifier
@@ -57,6 +68,8 @@ private struct RenderedBlock: Identifiable {
 struct BlockView: View {
     let block: any Markup
     let outlineIndex: Int?
+    var blockIndex: Int? = nil
+    var isSelected: Bool = false
 
     var body: some View {
         Group {
@@ -97,10 +110,36 @@ struct BlockView: View {
                 EmptyView()
             }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Theme.accentLight.opacity(0.45) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(isSelected ? Theme.accent : Color.clear, lineWidth: 1)
+        )
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: BlockPositionPreferenceKey.self,
+                    value: blockIndex.map { [$0: geo.frame(in: .named("readerContent")).minY] } ?? [:]
+                )
+            }
+        }
     }
 }
 
 private struct HeadingPositionPreferenceKey: PreferenceKey {
+    static var defaultValue: [Int: CGFloat] = [:]
+
+    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private struct BlockPositionPreferenceKey: PreferenceKey {
     static var defaultValue: [Int: CGFloat] = [:]
 
     static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
