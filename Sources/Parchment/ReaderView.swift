@@ -34,21 +34,30 @@ struct ReaderView: View {
     var shouldAutoFocus: Bool = false
     var blockActionRequest: BlockKeyboardActionRequest?
     var onNavigationAction: (VimNavigationAction) -> Void = { _ in }
+    @ObservedObject var findController: PreviewFindController
 
     var body: some View {
-        ReaderScrollContainer(
-            source: source,
-            scrollRequest: scrollRequest,
-            onScrollProgressChanged: onScrollProgressChanged,
-            annotationStore: annotationStore,
-            annotationVersion: annotationStore?.version ?? 0,
-            annotationActive: annotationStore?.isActive ?? false,
-            selectedBlockIndex: selectedBlockIndex,
-            shouldAutoFocus: shouldAutoFocus,
-            blockActionRequest: blockActionRequest,
-            onNavigationAction: onNavigationAction
-        )
-            .background(Theme.background)
+        VStack(spacing: 0) {
+            if findController.isVisible {
+                PreviewFindBar(controller: findController, source: source)
+                Divider().overlay(Theme.border)
+            }
+
+            ReaderScrollContainer(
+                source: source,
+                scrollRequest: scrollRequest,
+                onScrollProgressChanged: onScrollProgressChanged,
+                annotationStore: annotationStore,
+                annotationVersion: annotationStore?.version ?? 0,
+                annotationActive: annotationStore?.isActive ?? false,
+                selectedBlockIndex: selectedBlockIndex,
+                shouldAutoFocus: shouldAutoFocus,
+                blockActionRequest: blockActionRequest,
+                onNavigationAction: onNavigationAction,
+                findController: findController
+            )
+        }
+        .background(Theme.background)
     }
 }
 
@@ -63,6 +72,7 @@ private struct ReaderScrollContainer: NSViewRepresentable {
     var shouldAutoFocus: Bool
     var blockActionRequest: BlockKeyboardActionRequest?
     var onNavigationAction: (VimNavigationAction) -> Void
+    var findController: PreviewFindController
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onScrollProgressChanged: onScrollProgressChanged, onNavigationAction: onNavigationAction)
@@ -89,7 +99,8 @@ private struct ReaderScrollContainer: NSViewRepresentable {
                 onBlockPositionsChanged: context.coordinator.updateBlockPositions,
                 annotationStore: annotationStore,
                 selectedBlockIndex: selectedBlockIndex,
-                blockActionRequest: blockActionRequest
+                blockActionRequest: blockActionRequest,
+                highlightQuery: findController.isVisible ? findController.query : ""
             )
         )
         hostingView.translatesAutoresizingMaskIntoConstraints = true
@@ -97,6 +108,7 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         hostingView.postsFrameChangedNotifications = true
         scrollView.documentView = hostingView
         context.coordinator.annotationStore = annotationStore
+        context.coordinator.findController = findController
         context.coordinator.attach(scrollView: scrollView, hostingView: hostingView)
         context.coordinator.setAutoFocusEnabled(shouldAutoFocus)
         context.coordinator.updateSelection(selectedBlockIndex)
@@ -121,6 +133,8 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         context.coordinator.refreshAnnotations(version: annotationVersion, active: annotationActive)
         context.coordinator.handle(scrollRequest: scrollRequest)
         context.coordinator.updateBlockActionRequest(blockActionRequest)
+        context.coordinator.scrollToFindMatch(index: findController.engine.currentIndex, match: findController.engine.currentMatch)
+        context.coordinator.updateHighlightQuery(findController.isVisible ? findController.query : "")
     }
 
     final class Coordinator {
@@ -135,6 +149,7 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         private var headingMinYByOutlineIndex: [Int: CGFloat] = [:]
         private var pendingScrollRequest: ReaderScrollRequest?
         var annotationStore: AnnotationStore?
+        weak var findController: PreviewFindController?
         private var lastAnnotationVersion: Int = -1
         private var lastAnnotationActive: Bool = false
         private var vimEngine = VimNavigationEngine(blockCount: 0)
@@ -144,6 +159,10 @@ private struct ReaderScrollContainer: NSViewRepresentable {
         private var lastBlockActionToken: Int?
         private var latestBlockActionRequest: BlockKeyboardActionRequest?
         private var localKeyMonitor: Any?
+
+        private var activeHighlightQuery: String {
+            findController?.isVisible == true ? (findController?.query ?? "") : ""
+        }
 
         init(
             onScrollProgressChanged: @escaping (Double) -> Void,
@@ -227,7 +246,8 @@ private struct ReaderScrollContainer: NSViewRepresentable {
                 onBlockPositionsChanged: updateBlockPositions,
                 annotationStore: annotationStore,
                 selectedBlockIndex: vimEngine.selectedBlockIndex,
-                blockActionRequest: latestBlockActionRequest
+                blockActionRequest: latestBlockActionRequest,
+                highlightQuery: activeHighlightQuery
             )
             vimEngine.updateBlockCount(Array(Document(parsing: source).children).count)
             DispatchQueue.main.async { [weak self] in
@@ -247,7 +267,8 @@ private struct ReaderScrollContainer: NSViewRepresentable {
                 onBlockPositionsChanged: updateBlockPositions,
                 annotationStore: annotationStore,
                 selectedBlockIndex: vimEngine.selectedBlockIndex,
-                blockActionRequest: latestBlockActionRequest
+                blockActionRequest: latestBlockActionRequest,
+                highlightQuery: activeHighlightQuery
             )
         }
 
@@ -272,6 +293,29 @@ private struct ReaderScrollContainer: NSViewRepresentable {
             lastBlockActionToken = request.token
             latestBlockActionRequest = request
             refreshReaderRootView()
+        }
+
+        private var lastHighlightQuery: String = ""
+
+        func updateHighlightQuery(_ query: String) {
+            guard query != lastHighlightQuery else { return }
+            lastHighlightQuery = query
+            refreshReaderRootView()
+        }
+
+        private var lastFindMatchIndex: Int = -1
+        private var lastFindMatchBlock: Int = -1
+
+        func scrollToFindMatch(index: Int, match: PreviewFindMatch?) {
+            guard let match else {
+                lastFindMatchIndex = -1
+                lastFindMatchBlock = -1
+                return
+            }
+            guard index != lastFindMatchIndex || match.blockIndex != lastFindMatchBlock else { return }
+            lastFindMatchIndex = index
+            lastFindMatchBlock = match.blockIndex
+            scrollToBlock(match.blockIndex)
         }
 
         func handle(scrollRequest: ReaderScrollRequest?) {
@@ -335,7 +379,8 @@ private struct ReaderScrollContainer: NSViewRepresentable {
                 onBlockPositionsChanged: updateBlockPositions,
                 annotationStore: annotationStore,
                 selectedBlockIndex: vimEngine.selectedBlockIndex,
-                blockActionRequest: latestBlockActionRequest
+                blockActionRequest: latestBlockActionRequest,
+                highlightQuery: activeHighlightQuery
             )
         }
 
@@ -439,7 +484,6 @@ private struct ReaderScrollContainer: NSViewRepresentable {
 private final class ReaderKeyHandlingScrollView: NSScrollView {
     var onMouseDown: (() -> Void)?
     var onKeyCommand: ((VimNavigationCommand) -> Void)?
-
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
@@ -471,6 +515,7 @@ private struct ReaderContentView: View {
     var annotationStore: AnnotationStore?
     var selectedBlockIndex: Int?
     var blockActionRequest: BlockKeyboardActionRequest?
+    var highlightQuery: String = ""
 
     private var metadata: (type: String, date: String) {
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
@@ -512,7 +557,8 @@ private struct ReaderContentView: View {
                     onBlockPositionsChanged: onBlockPositionsChanged,
                     annotationStore: annotationStore,
                     selectedBlockIndex: selectedBlockIndex,
-                    blockActionRequest: blockActionRequest
+                    blockActionRequest: blockActionRequest,
+                    highlightQuery: highlightQuery
                 )
             }
             .frame(width: 640)

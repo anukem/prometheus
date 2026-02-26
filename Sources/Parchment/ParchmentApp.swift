@@ -19,6 +19,21 @@ struct ParchmentApp: App {
                 }
                 .keyboardShortcut("o")
             }
+
+            FindCommands()
+        }
+    }
+}
+
+private struct FindCommands: Commands {
+    @FocusedValue(\.previewFindController) var previewFindController
+
+    var body: some Commands {
+        CommandGroup(after: .textEditing) {
+            Button("Find…") {
+                FindCommandRouting.performFind(previewFindController: previewFindController)
+            }
+            .keyboardShortcut("f")
         }
     }
 }

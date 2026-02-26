@@ -8,6 +8,7 @@ struct MarkdownRenderer: View {
     var annotationStore: AnnotationStore?
     var selectedBlockIndex: Int?
     var blockActionRequest: BlockKeyboardActionRequest?
+    var highlightQuery: String = ""
 
     var body: some View {
         let blocks = parsedBlocks()
@@ -20,14 +21,16 @@ struct MarkdownRenderer: View {
                         blockId: block.blockId,
                         annotationStore: store,
                         isSelected: selectedBlockIndex == block.blockId.blockIndex,
-                        blockActionRequest: blockActionRequest
+                        blockActionRequest: blockActionRequest,
+                        highlightQuery: highlightQuery
                     )
                 } else {
                     BlockView(
                         block: block.markup,
                         outlineIndex: block.outlineIndex,
                         blockIndex: block.blockId.blockIndex,
-                        isSelected: selectedBlockIndex == block.blockId.blockIndex
+                        isSelected: selectedBlockIndex == block.blockId.blockIndex,
+                        highlightQuery: highlightQuery
                     )
                 }
             }
@@ -70,11 +73,12 @@ struct BlockView: View {
     let outlineIndex: Int?
     var blockIndex: Int? = nil
     var isSelected: Bool = false
+    var highlightQuery: String = ""
 
     var body: some View {
         Group {
             if let heading = block as? Heading {
-                HeadingView(heading: heading)
+                HeadingView(heading: heading, highlightQuery: highlightQuery)
                     .background {
                         if let outlineIndex {
                             GeometryReader { geo in
@@ -88,19 +92,19 @@ struct BlockView: View {
                     .padding(.bottom, heading.level == 1 ? 10 : 8)
                     .padding(.top, heading.level == 1 ? 0 : 24)
             } else if let para = block as? Paragraph {
-                ParagraphView(paragraph: para)
+                ParagraphView(paragraph: para, highlightQuery: highlightQuery)
                     .padding(.bottom, 22)
             } else if let bq = block as? BlockQuote {
-                BlockQuoteView(blockQuote: bq)
+                BlockQuoteView(blockQuote: bq, highlightQuery: highlightQuery)
                     .padding(.bottom, 26)
             } else if let list = block as? UnorderedList {
-                UnorderedListView(list: list)
+                UnorderedListView(list: list, highlightQuery: highlightQuery)
                     .padding(.bottom, 22)
             } else if let list = block as? OrderedList {
-                OrderedListView(list: list)
+                OrderedListView(list: list, highlightQuery: highlightQuery)
                     .padding(.bottom, 22)
             } else if let code = block as? CodeBlock {
-                CodeBlockView(code: code)
+                CodeBlockView(code: code, highlightQuery: highlightQuery)
                     .padding(.bottom, 22)
             } else if block is ThematicBreak {
                 Divider()
@@ -151,13 +155,14 @@ private struct BlockPositionPreferenceKey: PreferenceKey {
 
 struct HeadingView: View {
     let heading: Heading
+    var highlightQuery: String = ""
 
     var body: some View {
         Group {
             switch heading.level {
             case 1:
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(heading.plainText)
+                    highlightedText(heading.plainText, query: highlightQuery)
                         .font(Theme.titleFont)
                         .foregroundColor(Theme.textPrimary)
                         .tracking(-0.8)
@@ -168,16 +173,16 @@ struct HeadingView: View {
                 }
                 .padding(.bottom, 32)
             case 2:
-                Text(heading.plainText)
+                highlightedText(heading.plainText, query: highlightQuery)
                     .font(Theme.h2Font)
                     .foregroundColor(Theme.textPrimary)
                     .tracking(-0.5)
             case 3:
-                Text(heading.plainText)
+                highlightedText(heading.plainText, query: highlightQuery)
                     .font(Theme.h3Font)
                     .foregroundColor(Theme.textBody)
             default:
-                Text(heading.plainText)
+                highlightedText(heading.plainText, query: highlightQuery)
                     .font(.system(size: 16, weight: .semibold, design: .serif))
                     .foregroundColor(Theme.textBody)
             }
@@ -189,9 +194,10 @@ struct HeadingView: View {
 
 struct ParagraphView: View {
     let paragraph: Paragraph
+    var highlightQuery: String = ""
 
     var body: some View {
-        InlineText(inlines: Array(paragraph.inlineChildren))
+        InlineText(inlines: Array(paragraph.inlineChildren), highlightQuery: highlightQuery)
             .font(Theme.bodyFont)
             .foregroundColor(Theme.textBody)
             .lineSpacing(8)
@@ -203,6 +209,7 @@ struct ParagraphView: View {
 
 struct InlineText: View {
     let inlines: [any InlineMarkup]
+    var highlightQuery: String = ""
 
     var body: some View {
         inlines.reduce(SwiftUI.Text("")) { result, inline in
@@ -212,7 +219,7 @@ struct InlineText: View {
 
     private func inlineText(_ inline: any InlineMarkup) -> SwiftUI.Text {
         if let text = inline as? Markdown.Text {
-            return SwiftUI.Text(text.string)
+            return highlightedText(text.string, query: highlightQuery)
         } else if let strong = inline as? Strong {
             return strong.inlineChildren.reduce(SwiftUI.Text("")) { r, c in
                 r + inlineText(c)
@@ -222,7 +229,7 @@ struct InlineText: View {
                 r + inlineText(c)
             }.italic()
         } else if let code = inline as? InlineCode {
-            return SwiftUI.Text(code.code)
+            return highlightedText(code.code, query: highlightQuery)
                 .font(Theme.monoFont)
                 .foregroundColor(Theme.codeText)
         } else if let link = inline as? Markdown.Link {
@@ -241,6 +248,7 @@ struct InlineText: View {
 
 struct BlockQuoteView: View {
     let blockQuote: BlockQuote
+    var highlightQuery: String = ""
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -252,7 +260,7 @@ struct BlockQuoteView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(blockQuote.children.enumerated()), id: \.offset) { _, child in
                     if let para = child as? Paragraph {
-                        InlineText(inlines: Array(para.inlineChildren))
+                        InlineText(inlines: Array(para.inlineChildren), highlightQuery: highlightQuery)
                             .font(.custom("IBMPlexSerif-LightItalic", size: 18))
                             .foregroundColor(Theme.codeText)
                             .lineSpacing(8)
@@ -269,6 +277,7 @@ struct BlockQuoteView: View {
 
 struct UnorderedListView: View {
     let list: UnorderedList
+    var highlightQuery: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -281,7 +290,7 @@ struct UnorderedListView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(item.children.enumerated()), id: \.offset) { _, child in
                             if let para = child as? Paragraph {
-                                InlineText(inlines: Array(para.inlineChildren))
+                                InlineText(inlines: Array(para.inlineChildren), highlightQuery: highlightQuery)
                                     .font(Theme.bodyFont)
                                     .foregroundColor(Theme.textBody)
                                     .lineSpacing(6)
@@ -299,6 +308,7 @@ struct UnorderedListView: View {
 
 struct OrderedListView: View {
     let list: OrderedList
+    var highlightQuery: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -311,7 +321,7 @@ struct OrderedListView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(item.children.enumerated()), id: \.offset) { _, child in
                             if let para = child as? Paragraph {
-                                InlineText(inlines: Array(para.inlineChildren))
+                                InlineText(inlines: Array(para.inlineChildren), highlightQuery: highlightQuery)
                                     .font(Theme.bodyFont)
                                     .foregroundColor(Theme.textBody)
                                     .lineSpacing(6)
@@ -329,6 +339,7 @@ struct OrderedListView: View {
 
 struct CodeBlockView: View {
     let code: CodeBlock
+    var highlightQuery: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -341,7 +352,7 @@ struct CodeBlockView: View {
                     .padding(.bottom, 6)
             }
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(code.code.trimmingCharacters(in: .newlines))
+                highlightedText(code.code.trimmingCharacters(in: .newlines), query: highlightQuery)
                     .font(.system(size: 13, weight: .regular, design: .monospaced))
                     .foregroundColor(Theme.textBody)
                     .lineSpacing(5)

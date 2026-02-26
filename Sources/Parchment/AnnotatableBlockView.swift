@@ -46,6 +46,7 @@ struct AnnotatableBlockView: View {
     @ObservedObject var annotationStore: AnnotationStore
     var isSelected: Bool = false
     var blockActionRequest: BlockKeyboardActionRequest?
+    var highlightQuery: String = ""
 
     @State private var isComposing = false
     @State private var showActionBar = false
@@ -74,7 +75,7 @@ struct AnnotatableBlockView: View {
         } else {
             // Plain rendering — no annotation UI, but @ObservedObject still
             // triggers re-render when isActive flips back to true
-            BlockView(block: block, outlineIndex: outlineIndex, blockIndex: blockId.blockIndex, isSelected: isSelected)
+            BlockView(block: block, outlineIndex: outlineIndex, blockIndex: blockId.blockIndex, isSelected: isSelected, highlightQuery: highlightQuery)
         }
     }
 
@@ -86,7 +87,7 @@ struct AnnotatableBlockView: View {
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    BlockView(block: block, outlineIndex: outlineIndex, blockIndex: blockId.blockIndex, isSelected: isSelected)
+                    BlockView(block: block, outlineIndex: outlineIndex, blockIndex: blockId.blockIndex, isSelected: isSelected, highlightQuery: highlightQuery)
                         .overlay {
                             if isDeletionMarked {
                                 GeometryReader { geo in
