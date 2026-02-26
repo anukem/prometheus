@@ -93,6 +93,7 @@ struct ContentView: View {
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("annotation.toggle")
 
                 // Copy annotations button
                 if annotationStore.isActive && !annotationStore.annotations.isEmpty {

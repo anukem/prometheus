@@ -82,6 +82,14 @@ class AnnotationStore: ObservableObject {
         save()
     }
 
+    @discardableResult
+    func addCommentIfNotBlank(blockId: BlockIdentifier, text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        addComment(blockId: blockId, text: trimmed)
+        return true
+    }
+
     func toggleDeletion(blockId: BlockIdentifier) {
         if let index = annotations.firstIndex(where: { $0.blockId == blockId && $0.type == .deletion }) {
             annotations.remove(at: index)

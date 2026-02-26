@@ -19,5 +19,10 @@ let package = Package(
                 .process("Resources"),
             ]
         ),
+        .testTarget(
+            name: "ParchmentTests",
+            dependencies: ["Parchment"],
+            path: "Tests/ParchmentTests"
+        ),
     ]
 )
