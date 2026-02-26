@@ -17,6 +17,29 @@ func shouldHandleBlockActionRequest(
 }
 
 struct AnnotatableBlockView: View {
+    struct CommentComposerState {
+        enum KeyPress {
+            case escape
+            case enter
+        }
+
+        var shouldFocusInput = false
+
+        mutating func openComposer() {
+            shouldFocusInput = true
+        }
+
+        mutating func finishComposerSession() {
+            shouldFocusInput = false
+        }
+
+        mutating func handleKeyPress(_ keyPress: KeyPress) -> Bool {
+            guard keyPress == .escape else { return false }
+            finishComposerSession()
+            return true
+        }
+    }
+
     let block: any Markup
     let outlineIndex: Int?
     let blockId: BlockIdentifier
@@ -30,6 +53,7 @@ struct AnnotatableBlockView: View {
     @State private var isHovered = false
     @State private var submitGate = CommentSubmissionGate()
     @State private var lastHandledActionToken: Int?
+    @State private var commentComposerState = CommentComposerState()
     @FocusState private var isCommentInputFocused: Bool
 
     private var isDeletionMarked: Bool {
@@ -170,6 +194,7 @@ struct AnnotatableBlockView: View {
         HStack(spacing: 8) {
             Button {
                 commentText = ""
+                commentComposerState.openComposer()
                 withAnimation(.easeInOut(duration: 0.15)) {
                     isComposing = true
                     showActionBar = false
@@ -239,13 +264,19 @@ struct AnnotatableBlockView: View {
                     .submitLabel(.send)
                     .focused($isCommentInputFocused)
                     .accessibilityIdentifier("annotation.comment.input")
+                    .onAppear {
+                        if commentComposerState.shouldFocusInput {
+                            DispatchQueue.main.async {
+                                isCommentInputFocused = true
+                            }
+                        }
+                    }
 
                 HStack(spacing: 12) {
                     Spacer()
 
                     Button {
-                        commentText = ""
-                        withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
+                        cancelCommentComposition()
                     } label: {
                         Text("Cancel")
                             .font(.system(size: 11, weight: .medium))
@@ -282,14 +313,25 @@ struct AnnotatableBlockView: View {
                     .padding(.top, -1) // overlap with accent bar
             )
         }
+        .onExitCommand {
+            guard commentComposerState.handleKeyPress(.escape) else { return }
+            cancelCommentComposition()
+        }
         .cornerRadius(6)
         .shadow(color: Color.black.opacity(0.06), radius: 4, y: 2)
+    }
+
+    private func cancelCommentComposition() {
+        commentText = ""
+        commentComposerState.finishComposerSession()
+        withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
     }
 
     private func submitComment() {
         submitGate.run {
             guard annotationStore.addCommentIfNotBlank(blockId: blockId, text: commentText) else { return }
             commentText = ""
+            commentComposerState.finishComposerSession()
             withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
         }
     }
