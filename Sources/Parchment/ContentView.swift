@@ -12,6 +12,7 @@ struct ContentView: View {
     @Binding var document: ParchmentDocument
     @StateObject private var model = DocumentModel()
     @StateObject private var annotationStore = AnnotationStore()
+    @StateObject private var findController = PreviewFindController()
 
     @State private var viewMode: ViewMode = .preview
     @State private var showOutline: Bool = true
@@ -40,6 +41,7 @@ struct ContentView: View {
         }
         .background(WindowConfigurator())
         .background(Theme.background)
+        .focusedSceneValue(\.previewFindController, viewMode != .source ? findController : nil)
         .onChange(of: document.text) { newValue in
             model.update(source: newValue)
         }
@@ -150,7 +152,8 @@ struct ContentView: View {
                 selectedBlockIndex: selectedBlockIndex,
                 shouldAutoFocus: true,
                 blockActionRequest: blockActionRequest,
-                onNavigationAction: handleNavigationAction
+                onNavigationAction: handleNavigationAction,
+                findController: findController
             )
         case .source:
             SourceView(text: $document.text)
@@ -167,7 +170,8 @@ struct ContentView: View {
                     selectedBlockIndex: selectedBlockIndex,
                     shouldAutoFocus: false,
                     blockActionRequest: blockActionRequest,
-                    onNavigationAction: handleNavigationAction
+                    onNavigationAction: handleNavigationAction,
+                    findController: findController
                 )
                     .frame(maxWidth: .infinity)
             }
