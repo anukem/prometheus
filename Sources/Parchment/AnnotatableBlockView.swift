@@ -2,6 +2,18 @@ import SwiftUI
 import Markdown
 
 struct AnnotatableBlockView: View {
+    struct CommentComposerState {
+        var shouldFocusInput = false
+
+        mutating func openComposer() {
+            shouldFocusInput = true
+        }
+
+        mutating func finishComposerSession() {
+            shouldFocusInput = false
+        }
+    }
+
     let block: any Markup
     let outlineIndex: Int?
     let blockId: BlockIdentifier
@@ -12,6 +24,8 @@ struct AnnotatableBlockView: View {
     @State private var commentText = ""
     @State private var isHovered = false
     @State private var submitGate = CommentSubmissionGate()
+    @State private var commentComposerState = CommentComposerState()
+    @FocusState private var isCommentInputFocused: Bool
 
     private var isDeletionMarked: Bool {
         annotationStore.hasAnnotation(type: .deletion, for: blockId)
@@ -145,6 +159,7 @@ struct AnnotatableBlockView: View {
         HStack(spacing: 8) {
             Button {
                 commentText = ""
+                commentComposerState.openComposer()
                 withAnimation(.easeInOut(duration: 0.15)) {
                     isComposing = true
                     showActionBar = false
@@ -212,13 +227,22 @@ struct AnnotatableBlockView: View {
                     .foregroundColor(Theme.textBody)
                     .textFieldStyle(.plain)
                     .submitLabel(.send)
+                    .focused($isCommentInputFocused)
                     .accessibilityIdentifier("annotation.comment.input")
+                    .onAppear {
+                        if commentComposerState.shouldFocusInput {
+                            DispatchQueue.main.async {
+                                isCommentInputFocused = true
+                            }
+                        }
+                    }
 
                 HStack(spacing: 12) {
                     Spacer()
 
                     Button {
                         commentText = ""
+                        commentComposerState.finishComposerSession()
                         withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
                     } label: {
                         Text("Cancel")
@@ -264,6 +288,7 @@ struct AnnotatableBlockView: View {
         submitGate.run {
             guard annotationStore.addCommentIfNotBlank(blockId: blockId, text: commentText) else { return }
             commentText = ""
+            commentComposerState.finishComposerSession()
             withAnimation(.easeInOut(duration: 0.15)) { isComposing = false }
         }
     }
